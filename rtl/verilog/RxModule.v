@@ -1,3 +1,5 @@
+//version 0.2, set empty when ff_data_buf_index's less significant bits is 3'b111 or 3'b000
+
 `define eth_buf_len 1416			//1416=8*(8+6+6+2+3+148+4)
 `define nibble_cnt_step 9'h001
 `define MAC_ADD 48'h0100_0000_0000	//mac address: 0x00-00-00-00-00-01
@@ -56,7 +58,7 @@ module RxModule(phy_rxd, phy_rxen, phy_rxclk, phy_rxer,
 			nibble_cnt <= 9'h000;
 	end
 	
-	assign empty = ((ff_data_buf_index[2:0]==3'b011)|(ff_data_buf_index[2:0]==3'b100));
+	assign empty = ((ff_data_buf_index[2:0]==3'b111)|(ff_data_buf_index[2:0]==3'b000));
 	//every four 148bit, generate an empty signal to the TxModule
 	assign toggle = {~ff_data_buf_index[3],3'h0};	//indicate which half buffer is available
 	assign frameid = frameidt[ff_data_buf_index[3]];//

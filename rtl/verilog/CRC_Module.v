@@ -1,4 +1,4 @@
-module CRC_Module(Clk, Reset, Data, Enable, Initialize, Crc, CrcError);
+module CRC_Module(Clk, Reset, Data, Enable, Initialize, Crc, CrcError); 
 
 input Clk;
 input Reset;

@@ -1,4 +1,17 @@
+//author :gurenliang
+//Email: gurenliang@gmail.com
+//note: if there are some errors, you are welcome to contact me. It would be the best appreciation to me.
+
+
+
+//Next step, add ff_data control to show the IP is busy
+
+//version 0.3, declared a new variable data_av, and use it to start sending frame.
+//version 0.3, delete the usage of pre_buf, and rename the pre to preaddlt
+//version 0.3, add the option of frameID mode, by include common.v and judge the macro-varible frameIDfromRx
 //This module is used to receive data from the demodulate module and send the data to the Ethernet PHY chip
+`include "common.v"
+
 `define tx_data_buf_len 649		//3*8+156.25*4
 `define tx_data_len 656			//make the length of tx_data_buf be conformed to IEEE802.3
 
@@ -7,11 +20,21 @@
 `define ff_cnt_step 11'h1
 
 module TxModule(reset, phy_txd, phy_txen, phy_txclk, phy_txer,
-				ff_clk, ff_en, ff_data, frameid, empty, start,
+				ff_clk, ff_en, ff_data,
+
+				`ifdef frameIDfromRx
+					frameid, 
+				`endif
+				
+				empty, start,
 				test1, test2, test3, test4);
 	input phy_txclk, reset;
 	input ff_clk, ff_en, ff_data;	//ff_clk should be 207.83333KHz
-	input[23:0] frameid;			//get the frameid information from RxModule
+	
+	`ifdef frameIDfromRx
+		input[23:0] frameid;			//get the frameid information from RxModule
+	`endif
+	
 	input empty, start;					//decide whether should give out the "need-data" ethernet package
 	output [3:0] phy_txd;			//MII
 	output phy_txen, phy_txer;
@@ -19,16 +42,15 @@ module TxModule(reset, phy_txd, phy_txen, phy_txclk, phy_txer,
 	output test1, test2, test3, test4;
 	reg test1;//, test2, test3, test4;
 	
+	`ifdef frameIDcount
+		reg[23:0] frameid=24'h00_00_00;
+	`endif
+	
 	reg[3:0] phy_txd;
 	reg phy_txen;
 	
-	reg[175:0] pre;
+	reg[175:0] preaddlt;
 	//reg[175:0] pre_buf=176'h0008_5952_264C_5247_FFFF_FFFF_FFFF_D555_5555_5555_5555;
-	reg[159:0] pre_buf=159'h0100_0000_0000_FFFF_FFFF_FFFF_D555_5555_5555_5555;
-	//already stored MAC preamble, destination address and source address from right to left respectively. 
-	
-	//reg[223:0] temp_buf=224'h0186_15ac_0000_0000_0000_be86_15ac_88fe_467d_2300_0100_0406_0008_0100;
-	//reg[223:0] temp_buf=224'h0000_0000_0000_0000_0000_0000_0000_0000_467d_2300_0100_0a30_0008_0100;
 	
 	reg[`tx_data_buf_len-1:0] tx_data_buf[0:1];	//two buffer helps to step over different frame seamlessly
 	reg pre_toggle, toggle=1'b0;		//helps to decide when to give PC a MAC frame
@@ -65,21 +87,16 @@ module TxModule(reset, phy_txd, phy_txen, phy_txclk, phy_txer,
 				//tx_data_buf[toggle] <= {144'h0,temp_buf};
 				ff_cnt <= 0;
 				toggle <= ~toggle;
-				//tosend <= 1'b1;
+				//every time a frame being sent, frameID increases one
+				`ifdef frameIDcount
+					frameid <= frameid + 24'h00_00_01;
+				`endif
 			end
 			else begin
 				tx_data_buf[toggle] <= {ff_data, tx_data_buf[toggle][`tx_data_buf_len-1:1]};
 				ff_cnt <= ff_cnt + `ff_cnt_step;
 			end
 		end
-		//else if(ff_cnt != 0) begin
-		//	tx_data_buf[toggle] <= {(tx_data_buf[toggle][`MAXLEN-1:8]>>(`DATALEN-ff_cnt)),2'b00 ,ff_cnt[8:3]};
-			//tx_data_buf[toggle] <= {144'h0,temp_buf};
-		//	ff_cnt <= 0;
-		//	toggle <= ~toggle;
-			//tosend <= 1'b1;
-		//end
-		//else tosend <=1'b0;
 	end
 	
 	assign phy_txer = 1'b0;
@@ -89,11 +106,14 @@ module TxModule(reset, phy_txd, phy_txen, phy_txclk, phy_txer,
 		if (reset)
 			state <= s_idle;
 		else begin
+			if(pre_toggle ^ toggle) data_av<=1'b1;
 			case (state)
 				s_idle: begin		//wait to be trigged
 					test1 <= ~test1;
-					if(pre_toggle ^ toggle)	//once be trigged, prepare the data to send
+					if(data_av) begin	//once be trigged, prepare the data to send
 						state <= s_pre;
+						data_av <= 1'b0;
+					end
 					else state <= s_idle;
 				end
 				
@@ -147,13 +167,15 @@ module TxModule(reset, phy_txd, phy_txen, phy_txclk, phy_txer,
 			case (state)
 				s_idle: begin
 					tx_data <= {7'h0,tx_data_buf[~toggle]};
-					if(empty) pre <= {16'h0008,pre_buf};	//decide whether should ask PC for new packages
-					else pre <= {16'h0000, pre_buf};
+					//already stored MAC preamble, dest address and source address from right to left. 
+					//decide whether should ask PC for new frame
+					if(empty) preaddlt <= {16'h0008, `MAC_ADD, `PC_MAC_ADD, `Preamble};	
+					else preaddlt <= {16'h0000, `MAC_ADD, `PC_MAC_ADD, `Preamble};
 				end
 				s_pre:
-					{pre[171:0], phy_txd} <= pre;
+					{preaddlt[171:0], phy_txd} <= preaddlt;
 				s_add:
-					{pre[171:0], phy_txd} <= pre;
+					{preaddlt[171:0], phy_txd} <= preaddlt;
 				s_data:
 					{tx_data[`tx_data_len-5:0],phy_txd} <= tx_data;
 				s_crc: begin

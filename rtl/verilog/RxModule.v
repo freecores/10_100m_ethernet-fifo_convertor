@@ -1,17 +1,34 @@
+//author :gurenliang 
+//Email: gurenliang@gmail.com
+//note: if there are some errors, you are welcome to contact me. It would be the best appreciation to me.
+
+////Next task: make the feedback to PC showing need data.
+
+//version 0.3, changed the changes made by version 0.2 back
 //version 0.2, set empty when ff_data_buf_index's less significant bits is 3'b111 or 3'b000
+`include "common.v"
 
 `define eth_buf_len 1416			//1416=8*(8+6+6+2+3+148+4)
 `define nibble_cnt_step 9'h001
-`define MAC_ADD 48'h0100_0000_0000	//mac address: 0x00-00-00-00-00-01
 
 module RxModule(phy_rxd, phy_rxen, phy_rxclk, phy_rxer,
-				ff_clk, ff_data, ff_en, frameid, empty, start);
+				ff_clk, ff_data, ff_en, 
+				
+				`ifdef frameIDfromRx
+					frameid, 
+				`endif
+				
+				empty, start);
 	input phy_rxen, phy_rxclk, phy_rxer;	//MII interface
 	input [3:0] phy_rxd;
 	
 	input ff_clk;			//270.8333KHz
 	output ff_data, ff_en;
-	output[23:0] frameid;	
+	
+	`ifdef frameIDfromRx
+		output[23:0] frameid;
+	`endif
+	
 	output empty, start;			//to tell TxModule that buf in RxModule needs data
 	reg ff_data;
 	reg ff_en;
@@ -24,7 +41,9 @@ module RxModule(phy_rxd, phy_rxen, phy_rxclk, phy_rxer,
 	
 	reg[8:0] nibble_cnt=9'h00;
 	
-	reg[23:0] frameidt[0:1];
+	`ifdef frameIDfromRx
+		reg[23:0] frameidt[0:1];
+	`endif
 	
 	reg start=1'b0;
 	reg start_intra=1'b0;
@@ -42,7 +61,11 @@ module RxModule(phy_rxd, phy_rxen, phy_rxclk, phy_rxer,
 		end
 		else if ((nibble_cnt == 9'd354 ) & ((eth_buf[111:64] ^ `MAC_ADD)==48'h0)) begin
 		//one frame has been transfered over, the destinate address is right and then been put into the buffer
-			frameidt[toggle[3]] <= eth_buf[199:176];
+			
+			`ifdef frameIDfromRx
+				frameidt[toggle[3]] <= eth_buf[199:176];
+			`endif
+			
 			ff_data_buf[toggle     ] <= eth_buf[347:200];
 			ff_data_buf[toggle+4'h1] <= eth_buf[495:348];
 			ff_data_buf[toggle+4'h2] <= eth_buf[643:496];
@@ -58,10 +81,13 @@ module RxModule(phy_rxd, phy_rxen, phy_rxclk, phy_rxer,
 			nibble_cnt <= 9'h000;
 	end
 	
-	assign empty = ((ff_data_buf_index[2:0]==3'b111)|(ff_data_buf_index[2:0]==3'b000));
+	assign empty = ((ff_data_buf_index[2:0]==3'b011)|(ff_data_buf_index[2:0]==3'b100));
 	//every four 148bit, generate an empty signal to the TxModule
 	assign toggle = {~ff_data_buf_index[3],3'h0};	//indicate which half buffer is available
-	assign frameid = frameidt[ff_data_buf_index[3]];//
+	
+	`ifdef frameIDfromRx
+		assign frameid = frameidt[ff_data_buf_index[3]];//
+	`endif
 	
 	always@(negedge ff_clk)				//flow the data out of the buffer
 		if(start_intra==1'b0) begin			//wait the first frame to come

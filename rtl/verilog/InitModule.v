@@ -1,3 +1,7 @@
+//author :gurenliang
+//Email: gurenliang@gmail.com 
+//note: if there are some errors, you are welcome to contact me. It would be the best appreciation to me.
+
 //This module incharge of the generation of the reset signal for PHY chip
 //and hold low for at least 10ms.
 module InitModule(init_clk, reset, phy_reset, out_en);

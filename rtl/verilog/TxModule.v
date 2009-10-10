@@ -59,6 +59,7 @@ module TxModule(reset, phy_txd, phy_txen, phy_txclk, phy_txer,
 	reg[`ff_cnt_wide-1:0] ff_cnt=0;		
 		
 	reg[8:0] tx_cnt;
+	reg data_av;
 	
 	reg Enable_Crc, Initialize_Crc;		//declare the variables for the CRC module
 	wire [3:0] Data_Crc;

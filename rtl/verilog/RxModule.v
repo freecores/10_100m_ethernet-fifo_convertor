@@ -4,12 +4,19 @@
 
 ////Next task: make the feedback to PC showing need data.
 
+//vertion 0.4, add the function for TxModule to get start in a configurable ff_clk time after 
+//				RxModule receiving the first frame. To modify the delay time just to 
+//				change the value of the macro-variable delay_cnt_config.
 //version 0.3, changed the changes made by version 0.2 back
 //version 0.2, set empty when ff_data_buf_index's less significant bits is 3'b111 or 3'b000
+
 `include "common.v"
 
 `define eth_buf_len 1416			//1416=8*(8+6+6+2+3+148+4)
 `define nibble_cnt_step 9'h001
+
+`define delay_cnt_config 4'h0
+`define delay_cnt_step 4'h1
 
 module RxModule(phy_rxd, phy_rxen, phy_rxclk, phy_rxer,
 				ff_clk, ff_data, ff_en, 
@@ -47,6 +54,7 @@ module RxModule(phy_rxd, phy_rxen, phy_rxclk, phy_rxer,
 	
 	reg start=1'b0;
 	reg start_intra=1'b0;
+	reg[3:0] delay_cnt;
 	
 	reg[3:0] ff_data_buf_index = 4'h0;
 	reg ff_state;
@@ -95,16 +103,20 @@ module RxModule(phy_rxd, phy_rxen, phy_rxclk, phy_rxer,
 			ff_cnt <= 8'h00;
 			ff_data_buf_index <= 4'hf;
 			ff_en <= 1'b0;
+			
+			delay_cnt <= `delay_cnt_config;
 		end
 		else
 			case(ff_state)
 				transfer: begin
+					delay_cnt <= delay_cnt - `delay_cnt_step;
+					if(delay_cnt == 0) start <=1'b1;
+					
 					if(ff_cnt==8'h00) begin		//load new 148 bits
 						{ff_d[146:0],ff_data} <= ff_data_buf[ff_data_buf_index+4'h1];
 						ff_data_buf_index <= ff_data_buf_index + 4'h1;
 						ff_cnt <= ff_cnt + 8'h01;
 						ff_en <= 1'b1;
-						start <= 1'b1;
 					end
 					else if(ff_cnt == 8'd148) begin	//every 148 bit need a gap
 						ff_en <= 1'b0;

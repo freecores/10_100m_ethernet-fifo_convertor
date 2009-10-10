@@ -6,8 +6,8 @@
 //This file used to define some macro-varibles which can be used by all other files
 
 //NOTE!!! Olny one of the following two definitions can be open
-//`define frameIDfromRx			//frameID comes from Rxmodule
-`define frameIDcount			//frameID counts for itself by adding one every frame
+`define frameIDfromRx			//frameID comes from Rxmodule
+//`define frameIDcount			//frameID counts for itself by adding one every frame
 
 `define Preamble	64'hd555_5555_5555_5555
 

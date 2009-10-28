@@ -2,22 +2,25 @@
 //Email: gurenliang@gmail.com
 //note: if there are some errors, you are welcome to contact me. It would be the best appreciation to me.
 
+//Next step, reduce the resource consumed
 
-
-//Next step, add ff_data control to show the IP is busy
-
+//version 0.5, defined many parameter to configure the IP core, making it easier to use.
 //version 0.3, declared a new variable data_av, and use it to start sending frame.
 //version 0.3, delete the usage of pre_buf, and rename the pre to preaddlt
 //version 0.3, add the option of frameID mode, by include common.v and judge the macro-varible frameIDfromRx
 //This module is used to receive data from the demodulate module and send the data to the Ethernet PHY chip
 `include "common.v"
 
-`define tx_data_buf_len 649		//3*8+156.25*4
-`define tx_data_len 656			//make the length of tx_data_buf be conformed to IEEE802.3
+`define tx_data_buf_len	(`frameidlen+`uframelen*`num_uframe+132)	
+											//132=8.25*`num_uframe is the space between the uframes
+`define tx_data_madeup	4					//add to tx_data_buf_len to make 132 is dividible by 8
+`define append_zero		4'h0
+`define tx_data_len		(`tx_data_buf_len+`tx_data_madeup)	
+											//make the length of tx_data_buf be conformed to IEEE802.3
+`define ff_sink_cnt_len	12			//make sure 2^ff_sink_cnt_len is larger than or equal to tx_data_buf_len
+`define ff_cnt_init 	(1+`frameidlen)
 
-`define ff_cnt_wide 11
-`define ff_cnt_init 11'd25
-`define ff_cnt_step 11'h1
+`define tx_cnt_len	10			//make sure 2^tx_cnt_len is larger than [(`tx_data_len >> 2) + 51]
 
 module TxModule(reset, phy_txd, phy_txen, phy_txclk, phy_txer,
 				ff_clk, ff_en, ff_data,
@@ -26,16 +29,16 @@ module TxModule(reset, phy_txd, phy_txen, phy_txclk, phy_txer,
 					frameid, 
 				`endif
 				
-				empty, start,
+				start,
 				test1, test2, test3, test4);
 	input phy_txclk, reset;
 	input ff_clk, ff_en, ff_data;	//ff_clk should be 207.83333KHz
 	
 	`ifdef frameIDfromRx
-		input[23:0] frameid;			//get the frameid information from RxModule
+		input[`frameidlen-1:0] frameid;			//get the frameid information from RxModule
 	`endif
 	
-	input empty, start;					//decide whether should give out the "need-data" ethernet package
+	input  start;					//decide whether should give out the "need-data" ethernet package
 	output [3:0] phy_txd;			//MII
 	output phy_txen, phy_txer;
 	
@@ -43,7 +46,7 @@ module TxModule(reset, phy_txd, phy_txen, phy_txclk, phy_txer,
 	reg test1;//, test2, test3, test4;
 	
 	`ifdef frameIDcount
-		reg[23:0] frameid=24'h00_00_00;
+		reg[`frameidlen-1:0] frameid=0;
 	`endif
 	
 	reg[3:0] phy_txd;
@@ -56,9 +59,9 @@ module TxModule(reset, phy_txd, phy_txen, phy_txclk, phy_txer,
 	reg pre_toggle, toggle=1'b0;		//helps to decide when to give PC a MAC frame
 	reg[`tx_data_len-1:0] tx_data;		//used as FIFO
 		
-	reg[`ff_cnt_wide-1:0] ff_cnt=0;		
+	reg[`ff_sink_cnt_len-1:0] ff_cnt=0;		
 		
-	reg[8:0] tx_cnt;
+	reg[`tx_cnt_len-1:0] tx_cnt;
 	reg data_av;
 	
 	reg Enable_Crc, Initialize_Crc;		//declare the variables for the CRC module
@@ -79,8 +82,8 @@ module TxModule(reset, phy_txd, phy_txen, phy_txclk, phy_txer,
 	always @ (posedge ff_clk) begin		//receive data from demodulate module every bit one by one
 		if(ff_en & start) begin
 			if (ff_cnt==0) begin
-				tx_data_buf[toggle][`tx_data_buf_len-1:`tx_data_buf_len-25] <= {ff_data, frameid};
-				ff_cnt <= `ff_cnt_init; //11'd25
+				tx_data_buf[toggle][`tx_data_buf_len-1:`tx_data_buf_len-`frameidlen-1] <= {ff_data, frameid};
+				ff_cnt <= `ff_cnt_init;	//`frameidlen+1
 				//tosend <= 1'b0;
 			end
 			else if (ff_cnt == `tx_data_buf_len-1) begin
@@ -90,12 +93,12 @@ module TxModule(reset, phy_txd, phy_txen, phy_txclk, phy_txer,
 				toggle <= ~toggle;
 				//every time a frame being sent, frameID increases one
 				`ifdef frameIDcount
-					frameid <= frameid + 24'h00_00_01;
+					frameid <= frameid + 1;
 				`endif
 			end
 			else begin
 				tx_data_buf[toggle] <= {ff_data, tx_data_buf[toggle][`tx_data_buf_len-1:1]};
-				ff_cnt <= ff_cnt + `ff_cnt_step;
+				ff_cnt <= ff_cnt + 1;
 			end
 		end
 	end
@@ -119,28 +122,27 @@ module TxModule(reset, phy_txd, phy_txen, phy_txclk, phy_txer,
 				end
 				
 				s_pre:			//send the preambles
-					if(tx_cnt ==9'h00f)
+					if(tx_cnt == 15)
 						state <= s_add;
 					else
 						state <= s_pre;
 						
 				s_add: begin		//send the destination address, source address and type
-					if(tx_cnt==9'h02b)
+					if(tx_cnt== 43)
 						state <= s_data;
 					else
 						state <= s_add;
 				end
 				s_data:					//send data to PHY, every time four bits, lower bits go first
 					//test2 <= ~test2;
-					if (tx_cnt == (`tx_data_len >> 2)+9'h02b)
+					if (tx_cnt == (`tx_data_len >> 2) + 43)
 						state <= s_crc;
 					else state <= s_data;
 				
 				s_crc:
-					if (tx_cnt == (`tx_data_len >> 2)+9'h033)
+					if (tx_cnt == (`tx_data_len >> 2) + 51)
 						state <= s_idle;
-					else
-						state <= s_crc;
+					else state <= s_crc;
 				
 				default: 
 					state <= s_idle;
@@ -154,11 +156,11 @@ module TxModule(reset, phy_txd, phy_txen, phy_txclk, phy_txer,
 	
 	always @ (negedge phy_txclk) begin 	//state machine run to send out the MAC frame
 		if (reset)
-			tx_cnt <= 9'h000;
+			tx_cnt <= 0;
 		else if(state==s_idle)
-			tx_cnt <= 9'h000;
+			tx_cnt <= 0;
 		else
-			tx_cnt <= tx_cnt + 9'h01;
+			tx_cnt <= tx_cnt + 1;
 	end
 	
 	always @ (negedge phy_txclk) begin 	//state machine run to send out the MAC frame
@@ -167,11 +169,12 @@ module TxModule(reset, phy_txd, phy_txen, phy_txclk, phy_txer,
 		else 
 			case (state)
 				s_idle: begin
-					tx_data <= {7'h0,tx_data_buf[~toggle]};
+					tx_data <= {`append_zero, tx_data_buf[~toggle]};
 					//already stored MAC preamble, dest address and source address from right to left. 
 					//decide whether should ask PC for new frame
-					if(empty) preaddlt <= {16'h0008, `MAC_ADD, `PC_MAC_ADD, `Preamble};	
-					else preaddlt <= {16'h0000, `MAC_ADD, `PC_MAC_ADD, `Preamble};
+					/*if(empty) preaddlt <= {16'h0008, `MAC_ADD, `PC_MAC_ADD, `Preamble};	
+					else*/
+					preaddlt <= {16'h0000, `MAC_ADD, `PC_MAC_ADD, `Preamble};
 				end
 				s_pre:
 					{preaddlt[171:0], phy_txd} <= preaddlt;

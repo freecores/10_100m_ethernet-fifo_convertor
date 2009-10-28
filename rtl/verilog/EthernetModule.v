@@ -55,7 +55,7 @@ module EthernetModule(reset, clk_10K,
 				`ifdef frameIDfromRx
 				.frameid(frameid), 
 				`endif
-				.empty(empty), .start(start),
+				.start(start),
 				.test1(test1), .test2(test2), .test3(test3), .test4(test4));
 
 	RxModule RxModule_inst(.phy_rxd(phy_rxd), .phy_rxen(rxen_in), .phy_rxclk(phy_rxclk), .phy_rxer(phy_rxer),
@@ -63,7 +63,7 @@ module EthernetModule(reset, clk_10K,
 				`ifdef frameIDfromRx
 				.frameid(frameid), 
 				`endif
-				.empty(empty), .start(start));
+				.start(start));
 	
 	//assign test1 = ff_en;
 	//assign test2 = ff_data;

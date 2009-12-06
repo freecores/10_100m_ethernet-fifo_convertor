@@ -2,25 +2,25 @@
 //Email: gurenliang@gmail.com
 //note: if there are some errors, you are welcome to contact me. It would be the best appreciation to me.
 
-//Next step, reduce the resource consumed
 
-//version 0.5, defined many parameter to configure the IP core, making it easier to use.
+
+//Next step, add ff_data control to show the IP is busy
+
 //version 0.3, declared a new variable data_av, and use it to start sending frame.
 //version 0.3, delete the usage of pre_buf, and rename the pre to preaddlt
 //version 0.3, add the option of frameID mode, by include common.v and judge the macro-varible frameIDfromRx
 //This module is used to receive data from the demodulate module and send the data to the Ethernet PHY chip
 `include "common.v"
 
-`define tx_data_buf_len	(`frameidlen+`uframelen*`num_uframe+132)	
+`define tx_data_buf_len	(`frameidlen+`uframelen*`num_uframe+66)	
 											//132=8.25*`num_uframe is the space between the uframes
-`define tx_data_madeup	4					//add to tx_data_buf_len to make 132 is dividible by 8
-`define append_zero		4'h0
+											//66=8.25*`num_uframe is the space between the uframes
+`define tx_data_madeup	6					//add to tx_data_buf_len to make 132 is dividible by 8
+											//add to tx_data_buf_len to make  66 is dividible by 8
+
 `define tx_data_len		(`tx_data_buf_len+`tx_data_madeup)	
 											//make the length of tx_data_buf be conformed to IEEE802.3
-`define ff_sink_cnt_len	12			//make sure 2^ff_sink_cnt_len is larger than or equal to tx_data_buf_len
 `define ff_cnt_init 	(1+`frameidlen)
-
-`define tx_cnt_len	10			//make sure 2^tx_cnt_len is larger than [(`tx_data_len >> 2) + 51]
 
 module TxModule(reset, phy_txd, phy_txen, phy_txclk, phy_txer,
 				ff_clk, ff_en, ff_data,
@@ -31,6 +31,36 @@ module TxModule(reset, phy_txd, phy_txen, phy_txclk, phy_txer,
 				
 				start,
 				test1, test2, test3, test4);
+	//make sure 2^ff_sink_cnt_len is larger than or equal to tx_data_buf_len
+	parameter ff_sink_cnt_len =	(`tx_data_buf_len <=    2) ? 1 :
+								(`tx_data_buf_len <=    4) ? 2 :
+								(`tx_data_buf_len <=    8) ? 3 :
+								(`tx_data_buf_len <=   16) ? 4 :
+								(`tx_data_buf_len <=   32) ? 5 :
+								(`tx_data_buf_len <=   64) ? 6 :
+								(`tx_data_buf_len <=  128) ? 7 :
+								(`tx_data_buf_len <=  256) ? 8 :
+								(`tx_data_buf_len <=  512) ? 9 :
+								(`tx_data_buf_len <= 1024) ? 10:
+								(`tx_data_buf_len <= 2048) ? 11:
+								(`tx_data_buf_len <= 4096) ? 12:
+								(`tx_data_buf_len <= 8192) ? 13: 14;
+	//make sure 2^tx_cnt_len is larger than [(`tx_data_len >> 2) + 51]
+	parameter tx_cnt_len =	(((`tx_data_len >> 2) + 51) <=    2) ? 1 :
+							(((`tx_data_len >> 2) + 51) <=    4) ? 2 :
+							(((`tx_data_len >> 2) + 51) <=    8) ? 3 :
+							(((`tx_data_len >> 2) + 51) <=   16) ? 4 :
+							(((`tx_data_len >> 2) + 51) <=   32) ? 5 :
+							(((`tx_data_len >> 2) + 51) <=   64) ? 6 :
+							(((`tx_data_len >> 2) + 51) <=  128) ? 7 :
+							(((`tx_data_len >> 2) + 51) <=  256) ? 8 :
+							(((`tx_data_len >> 2) + 51) <=  512) ? 9 :
+							(((`tx_data_len >> 2) + 51) <= 1024) ? 10:
+							(((`tx_data_len >> 2) + 51) <= 2048) ? 11:
+							(((`tx_data_len >> 2) + 51) <= 4096) ? 12:
+							(((`tx_data_len >> 2) + 51) <= 8192) ? 13: 14;		
+				
+				
 	input phy_txclk, reset;
 	input ff_clk, ff_en, ff_data;	//ff_clk should be 207.83333KHz
 	
@@ -56,13 +86,13 @@ module TxModule(reset, phy_txd, phy_txen, phy_txclk, phy_txer,
 	//reg[175:0] pre_buf=176'h0008_5952_264C_5247_FFFF_FFFF_FFFF_D555_5555_5555_5555;
 	
 	reg[`tx_data_buf_len-1:0] tx_data_buf[0:1];	//two buffer helps to step over different frame seamlessly
-	reg pre_toggle, toggle=1'b0;		//helps to decide when to give PC a MAC frame
+	reg pre_toggle1,pre_toggle2, toggle=1'b0;		//helps to decide when to give PC a MAC frame
 	reg[`tx_data_len-1:0] tx_data;		//used as FIFO
 		
-	reg[`ff_sink_cnt_len-1:0] ff_cnt=0;		
+	reg[ff_sink_cnt_len-1:0] ff_cnt=0;		
 		
-	reg[`tx_cnt_len-1:0] tx_cnt;
-	reg data_av;
+	reg[tx_cnt_len-1:0] tx_cnt;
+	wire data_av;
 	
 	reg Enable_Crc, Initialize_Crc;		//declare the variables for the CRC module
 	wire [3:0] Data_Crc;
@@ -104,19 +134,23 @@ module TxModule(reset, phy_txd, phy_txen, phy_txclk, phy_txer,
 	end
 	
 	assign phy_txer = 1'b0;
+	assign data_av = pre_toggle1^pre_toggle2;
+	
+	always @ (negedge phy_txclk) begin 	//state machine run to send out the MAC frame
+		pre_toggle1 <= toggle;
+		pre_toggle2 <= pre_toggle1;
+	end
 
 	// Determine the next state
 	always @ (negedge phy_txclk) begin	//state machine run to send out the MAC frame
 		if (reset)
 			state <= s_idle;
 		else begin
-			if(pre_toggle ^ toggle) data_av<=1'b1;
 			case (state)
 				s_idle: begin		//wait to be trigged
 					test1 <= ~test1;
 					if(data_av) begin	//once be trigged, prepare the data to send
 						state <= s_pre;
-						data_av <= 1'b0;
 					end
 					else state <= s_idle;
 				end
@@ -151,10 +185,6 @@ module TxModule(reset, phy_txd, phy_txen, phy_txclk, phy_txer,
 	end
 	
 	always @ (negedge phy_txclk) begin 	//state machine run to send out the MAC frame
-		pre_toggle <= toggle;
-	end
-	
-	always @ (negedge phy_txclk) begin 	//state machine run to send out the MAC frame
 		if (reset)
 			tx_cnt <= 0;
 		else if(state==s_idle)
@@ -169,7 +199,7 @@ module TxModule(reset, phy_txd, phy_txen, phy_txclk, phy_txer,
 		else 
 			case (state)
 				s_idle: begin
-					tx_data <= {`append_zero, tx_data_buf[~toggle]};
+					tx_data <= {{`tx_data_madeup{1'b0}}, tx_data_buf[~toggle]};
 					//already stored MAC preamble, dest address and source address from right to left. 
 					//decide whether should ask PC for new frame
 					/*if(empty) preaddlt <= {16'h0008, `MAC_ADD, `PC_MAC_ADD, `Preamble};	

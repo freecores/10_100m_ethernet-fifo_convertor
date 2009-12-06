@@ -1,6 +1,6 @@
-//author :gurenliang
+//author :Renliang Gu
 //Email: gurenliang@gmail.com
-//note: if there are some errors, you are welcome to contact me. It would be the best appreciation to me.
+//note: if there are some errors, please feel free to contact me. Thank you very much!
 
 //Next step, reduce the resource consumed
 
@@ -18,12 +18,8 @@
 `define MAC_ADD		48'h0100_0000_0000	//mac address: 0x00-00-00-00-00-01
 `define PC_MAC_ADD	48'hffff_ffff_ffff	//mac address of the other terminal
 
-`define uframelen 148 				//148-bit
-`define num_uframe 16				//the number of uframes received once
-//`define num_cover_32
-`define num_cover_16
-`define num_cover_8
-`define num_cover_4
-
-
-`define frameidlen 24		//the id of the MAC frame
+`define frameidlen 		24		//the id of the MAC frame
+`define uframelen 		148 	//148-bit
+`define num_uframe 		8		//the number of uframes received once
+`define interval		8.25	//the interval between frames without send any data on fifo
+											

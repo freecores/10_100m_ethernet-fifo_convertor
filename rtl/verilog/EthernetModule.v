@@ -31,7 +31,6 @@ module EthernetModule(reset, clk_10K,
 	//after reset, phy_txclk and phy_rxen must be input ports
 	inout phy_txclk, phy_col, phy_rxen, phy_linksts, phy_crs;
 	
-	//wire ff_en, ff_data, 
 	wire out_en;	
 	wire rxen_in, txclk_in;
 	
@@ -56,16 +55,16 @@ module EthernetModule(reset, clk_10K,
 				.frameid(frameid), 
 				`endif
 				.start(start),
-				.test1(test1), .test2(test2), .test3(test3), .test4(test4));
+				.test1(), .test2(), .test3(), .test4());
+				//.test1(test1), .test2(test2), .test3(test3), .test4(test4));
 
 	RxModule RxModule_inst(.phy_rxd(phy_rxd), .phy_rxen(rxen_in), .phy_rxclk(phy_rxclk), .phy_rxer(phy_rxer),
 				.ff_clk(ff_clk), .ff_data(ff_data_source), .ff_en(ff_en_source), 
 				`ifdef frameIDfromRx
 				.frameid(frameid), 
 				`endif
-				.start(start));
-	
-	//assign test1 = ff_en;
-	//assign test2 = ff_data;
+				.start(start),
+				//.test1(), .test2(), .test3(), .test4());
+				.test1(test1), .test2(test2), .test3(test3), .test4(test4));
 				
 endmodule

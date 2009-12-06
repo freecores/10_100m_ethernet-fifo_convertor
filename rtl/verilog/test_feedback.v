@@ -1,3 +1,7 @@
+//author :Renliang Gu
+//Email: gurenliang@gmail.com
+//note: if there are some errors, please feel free to contact me. Thank you very much!
+
 //version 0.4, the test_feedback is created, main task is to test the top module, EthernetModule.v
 //				the ff_data_source is feed back to ff_data_sink
 
